@@ -49,4 +49,4 @@ at least one node. Ground every section in what the queries returned; if a
 section has no data, say so rather than inventing files, functions, or people.
 ```
 
-Full query bodies: [references/queries.md](references/queries.md).
+Full query bodies: [skills/orbit-onboard/references/queries.md](skills/orbit-onboard/references/queries.md).

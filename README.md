@@ -70,7 +70,7 @@ cd orbit-onboard && ./install.sh
 Needs Python 3 and `glab` v1.94.0+ with Orbit access (`glab orbit remote
 status`). The directory is also a valid agent skill -- drop it into an agent's
 skills path and it activates on prompts like *"I'm new to this repo, where do I
-start?"*. See [SKILL.md](SKILL.md), [references/queries.md](references/queries.md),
+start?"*. See [SKILL.md](skills/orbit-onboard/SKILL.md), [references/queries.md](skills/orbit-onboard/references/queries.md),
 and [CATALOG.md](CATALOG.md) to publish it as an AI Catalog agent.
 
 ## Future direction
