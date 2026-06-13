@@ -116,18 +116,8 @@ def section(title):
     print("-" * len(title))
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("project", help="project path, e.g. gitlab-org/orbit/knowledge-graph")
-    args = ap.parse_args()
-
-    try:
-        project_id = resolve_project_id(args.project)
-    except RuntimeError as e:
-        sys.exit(f"error: {e}")
-
-    print(f"\nOrientation for {args.project}")
+def render(project_path, project_id):
+    print(f"\nOrientation for {project_path}")
     print("=" * 60)
     print("A starting map of this project, built from the Orbit knowledge graph.")
 
@@ -164,6 +154,23 @@ def main():
     else:
         print("  no recent merged MRs found in the graph")
     print()
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("project", help="project path, e.g. gitlab-org/orbit/knowledge-graph")
+    args = ap.parse_args()
+
+    try:
+        project_id = resolve_project_id(args.project)
+    except RuntimeError as e:
+        sys.exit(f"error: {e}")
+
+    try:
+        render(args.project, project_id)
+    except RuntimeError as e:
+        sys.exit(f"error: Orbit query failed: {e}")
 
 
 if __name__ == "__main__":
