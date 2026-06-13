@@ -12,6 +12,7 @@ with Orbit enabled.
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -161,6 +162,10 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project", help="project path, e.g. gitlab-org/orbit/knowledge-graph")
     args = ap.parse_args()
+
+    if shutil.which("glab") is None:
+        sys.exit("error: 'glab' not found. Install GitLab CLI v1.94.0+, "
+                 "then run 'glab auth login'.")
 
     try:
         project_id = resolve_project_id(args.project)
