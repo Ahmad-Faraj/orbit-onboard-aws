@@ -80,6 +80,15 @@ and [CATALOG.md](CATALOG.md) to publish it as an AI Catalog agent.
   worked examples of how change happens here.
 - Link each core definition to its file and line so the agent can open it.
 
+
+## Part of the Orbit toolkit
+
+Three focused tools on the GitLab Knowledge Graph (Orbit), each for a different moment in the SDLC:
+
+- [orbit-review-context](https://gitlab.com/Ahmad-Faraj/orbit-review-context) - Review a merge request: blast radius, re-test set, vulnerabilities, reviewers - posted to the MR.
+- [orbit-onboard](https://gitlab.com/Ahmad-Faraj/orbit-onboard) *(this repo)* - Get oriented in a project: where the code lives and the core abstractions to learn first.
+- [orbit-risk](https://gitlab.com/Ahmad-Faraj/orbit-risk) - Know what depends on a file before you change it; find a project's riskiest files.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).
