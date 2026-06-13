@@ -63,8 +63,8 @@ Sections with no data in the graph are reported as empty, not faked.
 ## Install
 
 ```bash
-git clone https://gitlab.com/Ahmad-Faraj/orbit-onboard.git \
-  ~/.agents/skills/orbit-onboard
+git clone https://gitlab.com/Ahmad-Faraj/orbit-onboard.git
+cd orbit-onboard && ./install.sh
 ```
 
 Needs Python 3 and `glab` v1.94.0+ with Orbit access (`glab orbit remote
