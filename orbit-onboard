@@ -2,9 +2,9 @@
 """Generate a new-contributor orientation for a project from Orbit.
 
 A diff-level tool tells a reviewer about one change. This tells a newcomer about
-the whole project: where the code lives, how its modules depend on each other
-(with an architecture diagram), which definitions everything leans on (learn
-these first), and who has been working on it recently (who to ask).
+the whole project: a one-line summary, how its modules depend on each other (with
+an architecture diagram), which definitions everything leans on (learn these
+first), where the code lives, and who has been working on it (who to ask).
 
 All graph access goes through `glab orbit remote query`. Requires glab v1.94.0+
 with Orbit enabled.
@@ -43,14 +43,72 @@ def resolve_project_id(path):
     return json.loads(proc.stdout)["id"]
 
 
+# ── pure helpers (unit-tested) ──────────────────────────────────
+
 def module_of(path):
     """A coarse module name: the first two path segments (or one)."""
     parts = (path or "").split("/")
     return "/".join(parts[:2]) if len(parts) >= 2 else (path or "?")
 
 
-def count_definitions_by(project_id, prop, alias, limit):
-    """Count a project's definitions grouped by one property, highest first."""
+def short_module(name):
+    """Trim a common leading segment (crates/, src/) for readable labels."""
+    for prefix in ("crates/", "src/", "lib/", "packages/", "clients/", "internal/"):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+def rollup_modules(file_rows):
+    """Roll file-level definition counts up to module level. Returns a Counter."""
+    mods = Counter()
+    for r in file_rows:
+        mods[module_of(r.get("file"))] += r.get("n", 0) or 0
+    return mods
+
+
+def project_summary(total_defs, module_count, composition_rows):
+    """A one-line synthesis of what the project is."""
+    bits = []
+    if total_defs:
+        bits.append(f"~{total_defs} definitions")
+    if module_count:
+        bits.append(f"{module_count} modules")
+    if composition_rows:
+        dom = (composition_rows[0].get("kind") or "").lower()
+        if dom:
+            bits.append(f"mostly {dom}s")
+    return "; ".join(bits) + "." if bits else None
+
+
+def mermaid_label(name):
+    """A Mermaid-safe node label."""
+    s = short_module(name)
+    return "".join(c if (c.isalnum() or c in " -_/.") else "_" for c in s) or "?"
+
+
+def mermaid_modules(edges, limit=14):
+    """Render the cross-module dependencies as a Mermaid graph."""
+    if not edges:
+        return None
+    ids = {}
+
+    def nid(name):
+        if name not in ids:
+            ids[name] = f"m{len(ids)}"
+        return ids[name]
+
+    lines = ["```mermaid", "graph LR"]
+    for (a, b), n in edges[:limit]:
+        lines.append(f'  {nid(a)}["{mermaid_label(a)}"] -->|{n}| '
+                     f'{nid(b)}["{mermaid_label(b)}"]')
+    lines.append("```")
+    return "\n".join(lines)
+
+
+# ── Orbit queries ───────────────────────────────────────────────
+
+def definitions_by_file(project_id, limit=500):
     body = {
         "query": {
             "query_type": "aggregation",
@@ -59,7 +117,7 @@ def count_definitions_by(project_id, prop, alias, limit):
                  "filters": {"project_id": {"op": "eq", "value": project_id}}},
             ],
             "group_by": [{"kind": "property", "node": "d",
-                          "property": prop, "alias": alias}],
+                          "property": "file_path", "alias": "file"}],
             "aggregations": [{"function": "count", "target": "d", "alias": "n"}],
             "aggregation_sort": {"column": "n", "direction": "DESC"},
             "limit": limit,
@@ -68,21 +126,22 @@ def count_definitions_by(project_id, prop, alias, limit):
     return run_query(body).get("rows", [])
 
 
-def top_files(project_id, limit=10):
-    return count_definitions_by(project_id, "file_path", "file", limit)
-
-
 def composition(project_id, limit=12):
-    return count_definitions_by(project_id, "definition_type", "kind", limit)
-
-
-def module_map(project_id, limit=10):
-    """Roll up definition counts to module level (first two path segments)."""
-    rows = count_definitions_by(project_id, "file_path", "file", 500)
-    mods = Counter()
-    for r in rows:
-        mods[module_of(r.get("file"))] += r.get("n", 0)
-    return mods.most_common(limit)
+    body = {
+        "query": {
+            "query_type": "aggregation",
+            "nodes": [
+                {"id": "d", "entity": "Definition",
+                 "filters": {"project_id": {"op": "eq", "value": project_id}}},
+            ],
+            "group_by": [{"kind": "property", "node": "d",
+                          "property": "definition_type", "alias": "kind"}],
+            "aggregations": [{"function": "count", "target": "d", "alias": "n"}],
+            "aggregation_sort": {"column": "n", "direction": "DESC"},
+            "limit": limit,
+        }
+    }
+    return run_query(body).get("rows", [])
 
 
 def module_dependencies(project_id):
@@ -111,7 +170,7 @@ def module_dependencies(project_id):
     for r in rows:
         a, b = module_of(r.get("from")), module_of(r.get("to"))
         if a != b:
-            edges[(a, b)] += r.get("n", 0)
+            edges[(a, b)] += r.get("n", 0) or 0
     return edges.most_common()
 
 
@@ -156,31 +215,7 @@ def recent_authors(project_id, limit=30):
             if n.get("type") == "User" and n.get("username")]
 
 
-def short_module(name):
-    """Trim a common leading segment (crates/, src/) for readable labels."""
-    for prefix in ("crates/", "src/", "lib/", "packages/", "clients/"):
-        if name.startswith(prefix):
-            return name[len(prefix):]
-    return name
-
-
-def mermaid_modules(edges, limit=14):
-    """Render the cross-module dependencies as a Mermaid graph."""
-    if not edges:
-        return None
-    ids = {}
-
-    def nid(name):
-        if name not in ids:
-            ids[name] = f"m{len(ids)}"
-        return ids[name]
-
-    lines = ["```mermaid", "graph LR"]
-    for (a, b), n in edges[:limit]:
-        lines.append(f'  {nid(a)}["{short_module(a)}"] -->|{n}| {nid(b)}["{short_module(b)}"]')
-    lines.append("```")
-    return "\n".join(lines)
-
+# ── rendering ───────────────────────────────────────────────────
 
 def section(title):
     print(f"\n{title}")
@@ -190,43 +225,31 @@ def section(title):
 def render(project_path, project_id, show_diagram=True):
     print(f"\nOrientation for {project_path}")
     print("=" * 60)
+
+    # One shared query feeds the summary, the module map, and the top files.
+    files = definitions_by_file(project_id)
+    mods = rollup_modules(files)
+    comp = composition(project_id)
+    total = sum(r.get("n", 0) or 0 for r in comp)
+
+    summary = project_summary(total, len(mods), comp)
+    if summary:
+        print(summary)
     print("A starting map of this project, built from the Orbit knowledge graph.")
 
-    section("Where the code lives (top files by definitions)")
-    files = top_files(project_id)
-    if files:
-        for r in files:
-            print(f"  {r.get('n'):>5}  {r.get('file')}")
-    else:
-        print("  no indexed code found for this project")
-
-    section("The modules (by definition count)")
-    mods = module_map(project_id)
-    if mods:
-        for name, n in mods:
-            print(f"  {n:>5}  {short_module(name)}")
-    else:
-        print("  no modules found")
-
-    section("How the modules connect (cross-module calls)")
+    section("Architecture (how the modules connect)")
     deps = module_dependencies(project_id)
     if deps:
         for (a, b), n in deps[:12]:
             print(f"  {n:>5}  {short_module(a)} -> {short_module(b)}")
         diagram = mermaid_modules(deps)
         if show_diagram and diagram:
-            print("\n  Architecture diagram (paste into any Markdown or MR to render):\n")
+            print("\n  Diagram (paste into any Markdown or MR to render):\n")
             print(diagram)
+    elif mods:
+        print("  single module / no cross-module calls found")
     else:
-        print("  no cross-module call edges found")
-
-    section("What kind of code (definitions by type)")
-    comp = composition(project_id)
-    if comp:
-        for r in comp:
-            print(f"  {r.get('n'):>5}  {r.get('kind')}")
-    else:
-        print("  no indexed code found")
+        print("  no call graph found for this project")
 
     section("Learn these first (most-called definitions)")
     core = core_definitions(project_id)
@@ -237,6 +260,27 @@ def render(project_path, project_id, show_diagram=True):
         print("  read them before anything else.")
     else:
         print("  no call graph available")
+
+    section("The modules (by definition count)")
+    if mods:
+        for name, n in mods.most_common(10):
+            print(f"  {n:>5}  {short_module(name)}")
+    else:
+        print("  no indexed code found for this project")
+
+    section("Where the code lives (top files)")
+    if files:
+        for r in files[:10]:
+            print(f"  {r.get('n'):>5}  {r.get('file')}")
+    else:
+        print("  no indexed code found")
+
+    section("What kind of code (definitions by type)")
+    if comp:
+        for r in comp:
+            print(f"  {r.get('n'):>5}  {r.get('kind')}")
+    else:
+        print("  no indexed code found")
 
     section("Who to ask (recent authors)")
     authors = recent_authors(project_id)

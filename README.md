@@ -45,14 +45,23 @@ Real output (abbreviated) against an indexed project:
 ```
 Orientation for ahmad-faraj-group/knowledge-graph
 ============================================================
+~13391 definitions; 29 modules; mostly fields.
 A starting map of this project, built from the Orbit knowledge graph.
 
-Where the code lives (top files by definitions)
------------------------------------------------
-    484  clients/gkgpb/gkg.pb.go
-    246  crates/ontology/src/entities.rs
-    205  crates/code-graph/src/v2/dsl/types.rs
+Architecture (how the modules connect)
+--------------------------------------
+   1434  integration-tests -> integration-testkit
+    538  integration-tests -> query-engine
+     65  indexer -> clickhouse-client
     ...
+
+  Diagram (paste into any Markdown or MR to render):
+  ```mermaid
+  graph LR
+    m0["integration-tests"] -->|538| m2["query-engine"]
+    m3["indexer"] -->|65| m5["clickhouse-client"]
+    ...
+  ```
 
 Learn these first (most-called definitions)
 -------------------------------------------
@@ -61,6 +70,10 @@ Learn these first (most-called definitions)
     ...
   These are the definitions the rest of the code leans on most.
 ```
+
+The architecture block renders as a real diagram in GitLab, an MR comment, or
+Duo chat. Below it the orientation continues with the modules, the top files,
+the code composition, and who to ask.
 
 Sections with no data in the graph are reported as empty, not faked.
 
