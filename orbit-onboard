@@ -74,10 +74,9 @@ def project_summary(total_defs, module_count, composition_rows):
         bits.append(f"~{total_defs} definitions")
     if module_count:
         bits.append(f"{module_count} modules")
-    if composition_rows:
-        dom = (composition_rows[0].get("kind") or "").lower()
-        if dom:
-            bits.append(f"mostly {dom}s")
+    kinds = [(r.get("kind") or "").lower() for r in composition_rows[:2] if r.get("kind")]
+    if kinds:
+        bits.append("mostly " + " and ".join(k + "s" for k in kinds))
     return "; ".join(bits) + "." if bits else None
 
 

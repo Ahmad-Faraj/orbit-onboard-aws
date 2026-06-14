@@ -56,10 +56,10 @@ class RollupModules(unittest.TestCase):
 
 class ProjectSummary(unittest.TestCase):
     def test_full_summary(self):
-        out = onb.project_summary(1200, 9, [{"kind": "Field"}])
+        out = onb.project_summary(1200, 9, [{"kind": "Field"}, {"kind": "Method"}])
         self.assertIn("~1200 definitions", out)
         self.assertIn("9 modules", out)
-        self.assertIn("mostly fields", out)
+        self.assertIn("mostly fields and methods", out)
 
     def test_empty(self):
         self.assertIsNone(onb.project_summary(0, 0, []))
