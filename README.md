@@ -21,7 +21,6 @@ Point it at a project and it prints an orientation built from the Orbit knowledg
 |---------|----------|-----|
 | Where the code lives | Which files matter? | `Definition` count grouped by `file_path` |
 | Modules & architecture | How is it organized, and how do the parts depend on each other? | cross-module `CALLS` edges, rendered as a Mermaid diagram |
-| What kind of code | What's the shape? | `Definition` count grouped by `definition_type` |
 | Learn these first | What's the spine? | Incoming `CALLS` edges per definition |
 | Who to ask | Who works here? | `User -AUTHORED-> MergeRequest`, by recency |
 

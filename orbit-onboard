@@ -274,13 +274,6 @@ def render(project_path, project_id, show_diagram=True):
     else:
         print("  no indexed code found")
 
-    section("What kind of code (definitions by type)")
-    if comp:
-        for r in comp:
-            print(f"  {r.get('n'):>5}  {r.get('kind')}")
-    else:
-        print("  no indexed code found")
-
     section("Who to ask (recent authors)")
     authors = recent_authors(project_id)
     if authors:
