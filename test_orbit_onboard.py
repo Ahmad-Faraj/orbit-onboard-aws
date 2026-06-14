@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke tests for orbit-onboard (no network).
-
-The substance of orbit-onboard is its Orbit queries, which are exercised live.
-These tests confirm the module loads cleanly and exposes its expected surface,
-so a broken edit fails CI before it ships.
+"""Tests for orbit-onboard's pure logic (no network).
 
 Run: python3 test_orbit_onboard.py
 """
@@ -21,16 +17,52 @@ onb = importlib.util.module_from_spec(_spec)
 _loader.exec_module(onb)
 
 
+class ModuleOf(unittest.TestCase):
+    def test_two_segment_module(self):
+        self.assertEqual(onb.module_of("crates/query-engine/compiler/src/x.rs"),
+                         "crates/query-engine")
+
+    def test_single_segment(self):
+        self.assertEqual(onb.module_of("Makefile"), "Makefile")
+
+    def test_empty(self):
+        self.assertEqual(onb.module_of(""), "?")
+
+
+class ShortModule(unittest.TestCase):
+    def test_trims_known_prefixes(self):
+        self.assertEqual(onb.short_module("crates/query-engine"), "query-engine")
+        self.assertEqual(onb.short_module("clients/gkgpb"), "gkgpb")
+
+    def test_leaves_unknown(self):
+        self.assertEqual(onb.short_module("apps/web"), "apps/web")
+
+
+class MermaidModules(unittest.TestCase):
+    def test_none_when_empty(self):
+        self.assertIsNone(onb.mermaid_modules([]))
+
+    def test_renders_graph_with_counts(self):
+        out = onb.mermaid_modules([(("crates/a", "crates/b"), 12)])
+        self.assertTrue(out.startswith("```mermaid"))
+        self.assertIn("graph LR", out)
+        self.assertIn("|12|", out)
+        self.assertIn('"a"', out)
+        self.assertIn('"b"', out)
+
+    def test_caps_edges(self):
+        edges = [((f"crates/a{i}", "crates/b"), 1) for i in range(20)]
+        out = onb.mermaid_modules(edges, limit=5)
+        # 5 edges -> at most 6 distinct module nodes referenced
+        self.assertLessEqual(out.count("-->"), 5)
+
+
 class ModuleSurface(unittest.TestCase):
     def test_exposes_core_functions(self):
         for name in ("count_definitions_by", "top_files", "composition",
-                     "core_definitions", "recent_authors", "resolve_project_id",
-                     "section", "main"):
+                     "module_map", "module_dependencies", "core_definitions",
+                     "recent_authors", "resolve_project_id", "render", "main"):
             self.assertTrue(hasattr(onb, name), name)
-
-    def test_top_files_and_composition_are_callables(self):
-        self.assertTrue(callable(onb.top_files))
-        self.assertTrue(callable(onb.composition))
 
 
 if __name__ == "__main__":

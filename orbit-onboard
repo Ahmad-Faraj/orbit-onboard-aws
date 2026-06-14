@@ -2,9 +2,9 @@
 """Generate a new-contributor orientation for a project from Orbit.
 
 A diff-level tool tells a reviewer about one change. This tells a newcomer about
-the whole project: where the code lives, what kind of code it is, which
-definitions everything depends on (learn these first), and who has been working
-on it recently (who to ask).
+the whole project: where the code lives, how its modules depend on each other
+(with an architecture diagram), which definitions everything leans on (learn
+these first), and who has been working on it recently (who to ask).
 
 All graph access goes through `glab orbit remote query`. Requires glab v1.94.0+
 with Orbit enabled.
@@ -43,6 +43,12 @@ def resolve_project_id(path):
     return json.loads(proc.stdout)["id"]
 
 
+def module_of(path):
+    """A coarse module name: the first two path segments (or one)."""
+    parts = (path or "").split("/")
+    return "/".join(parts[:2]) if len(parts) >= 2 else (path or "?")
+
+
 def count_definitions_by(project_id, prop, alias, limit):
     """Count a project's definitions grouped by one property, highest first."""
     body = {
@@ -70,6 +76,45 @@ def composition(project_id, limit=12):
     return count_definitions_by(project_id, "definition_type", "kind", limit)
 
 
+def module_map(project_id, limit=10):
+    """Roll up definition counts to module level (first two path segments)."""
+    rows = count_definitions_by(project_id, "file_path", "file", 500)
+    mods = Counter()
+    for r in rows:
+        mods[module_of(r.get("file"))] += r.get("n", 0)
+    return mods.most_common(limit)
+
+
+def module_dependencies(project_id):
+    """Cross-module CALLS edges: which module depends on which, by call count."""
+    body = {
+        "query": {
+            "query_type": "aggregation",
+            "nodes": [
+                {"id": "caller", "entity": "Definition",
+                 "filters": {"project_id": {"op": "eq", "value": project_id}}},
+                {"id": "callee", "entity": "Definition",
+                 "filters": {"project_id": {"op": "eq", "value": project_id}}},
+            ],
+            "relationships": [{"type": "CALLS", "from": "caller", "to": "callee"}],
+            "group_by": [
+                {"kind": "property", "node": "caller", "property": "file_path", "alias": "from"},
+                {"kind": "property", "node": "callee", "property": "file_path", "alias": "to"},
+            ],
+            "aggregations": [{"function": "count", "target": "caller", "alias": "n"}],
+            "aggregation_sort": {"column": "n", "direction": "DESC"},
+            "limit": 1000,
+        }
+    }
+    rows = run_query(body).get("rows", [])
+    edges = Counter()
+    for r in rows:
+        a, b = module_of(r.get("from")), module_of(r.get("to"))
+        if a != b:
+            edges[(a, b)] += r.get("n", 0)
+    return edges.most_common()
+
+
 def core_definitions(project_id, limit=10):
     """Definitions with the most incoming CALLS edges -- the project's spine."""
     body = {
@@ -83,8 +128,7 @@ def core_definitions(project_id, limit=10):
             "relationships": [{"type": "CALLS", "from": "caller", "to": "callee"}],
             "group_by": [{"kind": "property", "node": "callee",
                           "property": "fqn", "alias": "fn"}],
-            "aggregations": [{"function": "count", "target": "caller",
-                              "alias": "callers"}],
+            "aggregations": [{"function": "count", "target": "caller", "alias": "callers"}],
             "aggregation_sort": {"column": "callers", "direction": "DESC"},
             "limit": limit,
         }
@@ -112,12 +156,38 @@ def recent_authors(project_id, limit=30):
             if n.get("type") == "User" and n.get("username")]
 
 
+def short_module(name):
+    """Trim a common leading segment (crates/, src/) for readable labels."""
+    for prefix in ("crates/", "src/", "lib/", "packages/", "clients/"):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
+def mermaid_modules(edges, limit=14):
+    """Render the cross-module dependencies as a Mermaid graph."""
+    if not edges:
+        return None
+    ids = {}
+
+    def nid(name):
+        if name not in ids:
+            ids[name] = f"m{len(ids)}"
+        return ids[name]
+
+    lines = ["```mermaid", "graph LR"]
+    for (a, b), n in edges[:limit]:
+        lines.append(f'  {nid(a)}["{short_module(a)}"] -->|{n}| {nid(b)}["{short_module(b)}"]')
+    lines.append("```")
+    return "\n".join(lines)
+
+
 def section(title):
     print(f"\n{title}")
     print("-" * len(title))
 
 
-def render(project_path, project_id):
+def render(project_path, project_id, show_diagram=True):
     print(f"\nOrientation for {project_path}")
     print("=" * 60)
     print("A starting map of this project, built from the Orbit knowledge graph.")
@@ -129,6 +199,26 @@ def render(project_path, project_id):
             print(f"  {r.get('n'):>5}  {r.get('file')}")
     else:
         print("  no indexed code found for this project")
+
+    section("The modules (by definition count)")
+    mods = module_map(project_id)
+    if mods:
+        for name, n in mods:
+            print(f"  {n:>5}  {short_module(name)}")
+    else:
+        print("  no modules found")
+
+    section("How the modules connect (cross-module calls)")
+    deps = module_dependencies(project_id)
+    if deps:
+        for (a, b), n in deps[:12]:
+            print(f"  {n:>5}  {short_module(a)} -> {short_module(b)}")
+        diagram = mermaid_modules(deps)
+        if show_diagram and diagram:
+            print("\n  Architecture diagram (paste into any Markdown or MR to render):\n")
+            print(diagram)
+    else:
+        print("  no cross-module call edges found")
 
     section("What kind of code (definitions by type)")
     comp = composition(project_id)
@@ -143,7 +233,8 @@ def render(project_path, project_id):
     if core:
         for r in core:
             print(f"  {r.get('callers'):>5} callers  {r.get('fn')}")
-        print("\n  These are the definitions the rest of the code leans on most.")
+        print("\n  These are the definitions the rest of the code leans on most -")
+        print("  read them before anything else.")
     else:
         print("  no call graph available")
 
@@ -161,6 +252,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project", help="project path, e.g. gitlab-org/orbit/knowledge-graph")
+    ap.add_argument("--no-diagram", action="store_true",
+                    help="omit the Mermaid architecture diagram from the output")
     args = ap.parse_args()
 
     if shutil.which("glab") is None:
@@ -173,7 +266,7 @@ def main():
         sys.exit(f"error: {e}")
 
     try:
-        render(args.project, project_id)
+        render(args.project, project_id, show_diagram=not args.no_diagram)
     except RuntimeError as e:
         sys.exit(f"error: Orbit query failed: {e}")
 

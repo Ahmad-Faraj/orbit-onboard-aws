@@ -15,16 +15,20 @@ what Orbit indexes.
 
 ## What it does
 
-Point it at a project and it prints an orientation built from four Orbit queries:
+Point it at a project and it prints an orientation built from the Orbit knowledge graph:
 
 | Section | Question | How |
 |---------|----------|-----|
 | Where the code lives | Which files matter? | `Definition` count grouped by `file_path` |
+| Modules & architecture | How is it organized, and how do the parts depend on each other? | cross-module `CALLS` edges, rendered as a Mermaid diagram |
 | What kind of code | What's the shape? | `Definition` count grouped by `definition_type` |
 | Learn these first | What's the spine? | Incoming `CALLS` edges per definition |
 | Who to ask | Who works here? | `User -AUTHORED-> MergeRequest`, by recency |
 
-The **"learn these first"** section is the interesting one. Instead of guessing,
+Two sections do the heavy lifting. **Modules & architecture** rolls the call
+graph up to the module level and renders a Mermaid diagram of how the subsystems
+depend on each other -- the mental model a newcomer normally spends a week
+building. And the **"learn these first"** section Instead of guessing,
 it ranks definitions by how many other definitions call them. The functions with
 the most callers are the ones the whole project leans on -- so they are the ones
 worth understanding first. That ranking is only cheap to compute because Orbit

@@ -21,11 +21,38 @@ the numeric project id (`glab api projects/<url-encoded-path> | jq .id`).
 }
 ```
 
-## 2. Composition
+## 2. Module dependencies
 
-Same as above, grouped by `definition_type` instead of `file_path`.
+Aggregate the `CALLS` edge grouped by both the caller's and the callee's
+`file_path`. Roll each path up to a module (first two segments) client-side and
+keep the pairs where the modules differ -- those are the cross-module
+dependencies. Render them as a Mermaid `graph LR`.
 
-## 3. Core abstractions
+```json
+{
+  "query": {
+    "query_type": "aggregation",
+    "nodes": [
+      {"id": "caller", "entity": "Definition", "filters": {"project_id": {"op": "eq", "value": $PID}}},
+      {"id": "callee", "entity": "Definition", "filters": {"project_id": {"op": "eq", "value": $PID}}}
+    ],
+    "relationships": [{"type": "CALLS", "from": "caller", "to": "callee"}],
+    "group_by": [
+      {"kind": "property", "node": "caller", "property": "file_path", "alias": "from"},
+      {"kind": "property", "node": "callee", "property": "file_path", "alias": "to"}
+    ],
+    "aggregations": [{"function": "count", "target": "caller", "alias": "n"}],
+    "aggregation_sort": {"column": "n", "direction": "DESC"},
+    "limit": 1000
+  }
+}
+```
+
+## 3. Composition
+
+Same as query 1, grouped by `definition_type` instead of `file_path`.
+
+## 4. Core abstractions
 
 Count incoming `CALLS` edges per definition. High counts mean the rest of the
 code depends on it.
@@ -48,7 +75,7 @@ code depends on it.
 }
 ```
 
-## 4. Recent authors
+## 5. Recent authors
 
 ```json
 {
@@ -72,5 +99,6 @@ Count how often each username appears to rank candidates.
 
 - `filters` is an object keyed by property name, not an array.
 - Aggregation queries need a filter on at least one node.
+- `group_by` accepts up to 4 keys; query 2 uses two (caller and callee file).
 - `Definition` properties used here: `file_path`, `definition_type`, `fqn`,
   `project_id`.

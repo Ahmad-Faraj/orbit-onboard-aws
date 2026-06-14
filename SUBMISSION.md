@@ -7,9 +7,9 @@
 
 ## The one-liner
 
-Point it at any indexed project and it prints a new-contributor tour: where the
-code lives, the handful of definitions to learn first, and who to ask -- from the
-GitLab Knowledge Graph.
+Point it at any indexed project and it prints a new-contributor tour: a module
+map with an architecture diagram, the handful of definitions to learn first, and
+who to ask -- all from the GitLab Knowledge Graph.
 
 ## Inspiration
 
@@ -25,6 +25,8 @@ indexes. orbit-onboard reads it back as a guided tour.
 Run `orbit-onboard <project-path>` and it prints an orientation:
 
 - **Where the code lives** -- the files with the most definitions.
+- **Modules & architecture** -- the project's subsystems and how they depend on
+  each other, rendered as a Mermaid diagram you can read at a glance.
 - **What kind of code it is** -- the mix of functions, methods, structs, etc.
 - **Learn these first** -- definitions ranked by how many other definitions call
   them. The most-called functions are the project's spine.
@@ -32,8 +34,10 @@ Run `orbit-onboard <project-path>` and it prints an orientation:
 
 ## The idea worth judging
 
-Everyone can list files. The novel move here is **ranking definitions by
-call-graph centrality to produce a learning order.** Instead of "here are 800
+Everyone can list files. orbit-onboard does the two things a senior engineer
+actually does for a newcomer: it **draws the architecture** (rolling the call
+graph up to a module dependency diagram) and it **ranks what to read first by
+call-graph centrality.** Instead of "here are 800
 files," it says "these ten functions are what the project is built around -- start
 there." That's how an experienced engineer actually explains a codebase, and it's
 only cheap to compute because Orbit already holds the resolved call graph. On a
