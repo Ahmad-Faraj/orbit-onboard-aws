@@ -92,5 +92,5 @@ CI.
 ## Links
 
 - Repo (MIT): https://gitlab.com/Ahmad-Faraj/orbit-onboard
-- AI Catalog agent: <add link>
-- Demo video: <add YouTube/Vimeo link>
+- AI Catalog agent: https://gitlab.com/explore/ai-catalog/agents/1011077
+- Demo video: https://www.youtube.com/watch?v=q9eqNdPvqoA&t=132s
