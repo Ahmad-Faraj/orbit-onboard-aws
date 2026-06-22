@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Orbit Onboard as a Service - event-driven serverless architecture.
+  API Gateway + Lambda + SQS + container Worker (ECR) + DynamoDB + S3, secured
+  with Cognito, WAF, Secrets Manager, and KMS. Manara SAA graduation project.
+
+# NOTE: working skeleton. Run `sam validate` and reconcile against your provider
+# before relying on it. The GitLab token secret must be created out-of-band (see
+# docs/deployment.md) and its ARN passed in as GitLabSecretArn.
+
+Parameters:
+  GitLabSecretArn:
+    Type: String
+    Description: ARN of the Secrets Manager secret holding the GitLab token.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Tracing: Active
+
+Resources:
+
+  # ---------- Data ----------
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+
+  # ---------- Async queue + DLQ ----------
+  JobDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  JobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 660  # >= worker timeout
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt JobDLQ.Arn
+        maxReceiveCount: 3
+
+  CompletionTopic:
+    Type: AWS::SNS::Topic
+
+  # ---------- Auth ----------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: orbit-onboard-users
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  # ---------- API ----------
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Auth:
+        DefaultAuthorizer: CognitoAuth
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn: !GetAtt UserPool.Arn
+
+  # ---------- Submit / Status Lambda (zip) ----------
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../api/
+      Handler: app.handler
+      Environment:
+        Variables:
+          JOBS_TABLE: !Ref JobsTable
+          QUEUE_URL: !Ref JobQueue
+          REPORTS_DOMAIN: ""   # set to your CloudFront domain after deploy, e.g. d1234.cloudfront.net
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt JobQueue.QueueName
+      Events:
+        Submit:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /orientations
+            Method: post
+        Status:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /orientations/{jobId}
+            Method: get
+
+  # ---------- Worker Lambda (container image) ----------
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: aws-architecture/worker/Dockerfile
+      DockerContext: ../../        # repository root (so it can copy ./orbit-onboard)
+      DockerTag: latest
+    Properties:
+      PackageType: Image
+      Timeout: 600
+      MemorySize: 1024
+      Environment:
+        Variables:
+          REPORTS_BUCKET: !Ref ReportsBucket
+          JOBS_TABLE: !Ref JobsTable
+          GITLAB_SECRET_ID: !Ref GitLabSecretArn
+          COMPLETION_TOPIC_ARN: !Ref CompletionTopic
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobsTable
+        - S3CrudPolicy:
+            BucketName: !Ref ReportsBucket
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt CompletionTopic.TopicName
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref GitLabSecretArn
+      Events:
+        Jobs:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt JobQueue.Arn
+            BatchSize: 1
+
+Outputs:
+  ApiUrl:
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  ReportsBucket:
+    Value: !Ref ReportsBucket
+  JobsTable:
+    Value: !Ref JobsTable
