@@ -1,6 +1,8 @@
 # Orbit Onboard as a Service - AWS Architecture
 
-My Manara AWS Solutions Architect Associate graduation project. [orbit-onboard](https://gitlab.com/Ahmad-Faraj/orbit-onboard) is a Python CLI that generates a new-contributor orientation from the GitLab Orbit Knowledge Graph. This architecture runs it as a multi-user, serverless web service on AWS.
+*This is the enterprise scaling architecture for **Orbit Onboard**, built for the GitLab Transcend Hackathon. [View the main GitLab agent repository here](https://gitlab.com/Ahmad-Faraj/orbit-onboard).*
+
+My Manara AWS Solutions Architect Associate graduation project. orbit-onboard is a Python CLI that generates a new-contributor orientation from the GitLab Orbit Knowledge Graph. This architecture runs it as a multi-user, serverless web service on AWS.
 
 ![Architecture](./diagram/architecture.png)
 
